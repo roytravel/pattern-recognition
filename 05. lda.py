@@ -6,9 +6,6 @@ from sklearn.discriminant_analysis import LinearDiscriminantAnalysis
 from sklearn.neighbors import KNeighborsClassifier
 from sklearn.decomposition import PCA
 
-
-
-
 def load_data():
     X, y = load_digits(return_X_y=True)
 
@@ -33,8 +30,6 @@ def transform(tr_X, tr_y, te_X, te_y):
     # 8 x 8 = 64차원. n_components를 20으로 줘도 괜찮은 수준
     # lda = PCA(n_components=20)
     # lda.fit(tr_X, tr_y)
-
-
 
     # 훈련과 테스트셋에 대해 트랜스폼
     tr_X_tf = lda.transform(tr_X)
@@ -70,8 +65,6 @@ def transform(tr_X, tr_y, te_X, te_y):
     return tr_X_tf, te_X_tf
 
 
-
-
 def classify(tr_X, tr_y, te_X, te_y, title):
     print (title)
 
@@ -85,9 +78,7 @@ def main():
     
     # (?, 64), (?, )
     tr_X, tr_y, te_X, te_y = load_data()
-
     tr_X_tf, te_X_tf = transform(tr_X, tr_y, te_X, te_y)
-
 
     classify(tr_X, tr_y, te_X, te_y, 'original')
     classify(tr_X_tf, tr_y, te_X_tf, te_y, 'lda')
