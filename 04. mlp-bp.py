@@ -225,7 +225,7 @@ class MLP:
             DenseLayer(100, 10, Softmax, name='layer3')
         ]
 
-    def fit(self, x, t):  # Implement backpropagation algortihm / 직관적으로 구현.
+    def fit(self, x, t):  # Implement backpropagation algorithm / 직관적으로 구현.
         # 입력 값에 대해 모델의 출력값 계산
         y = self(x)
 
