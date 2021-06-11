@@ -1,0 +1,10 @@
+.idea/
+Assignment/.idea
+Assignment/.ipynb_checkpoints
+Assignment/__pycache__
+/__pycache__
+
+/Assignment/hidden
+
+/Assignment/test
+/Assignment/train

@@ -5,7 +5,6 @@ import matplotlib.pyplot as plt
 from sklearn.datasets import load_digits
 from sklearn.preprocessing import OneHotEncoder
 
-
 ############################################# Base class
 class Activation:
     def __init__(self):
@@ -65,7 +64,7 @@ class Softmax(Activation):
 
         return f
 
-    # 조금 복잡하게 생김. 다른 Activation function들과 달리 미분 값이 matrix 형태로 나옴.
+    # 다른 Activation function들과 달리 미분 값이 matrix 형태로 나옴.
     # 이유는 계산 할때 위 아래로 값이 들어가는데 분모에 서메이션이 들어가서 Matrix로 나옴.
     def calc_gradients(self, x):
         f = self(x)
@@ -91,7 +90,8 @@ class TanH(Activation):
         super(TanH, self).__init__()
 
     def _function(self, x):
-        return 0.
+        return (np.exp(x) - np.exp(-x) / (np.exp(x) + np.exp(-x)))
+
 
     def calc_gradients(self, x):
         return 0.
@@ -102,14 +102,25 @@ class ReLU(Activation):
         super(ReLU, self).__init__()
 
     def _function(self, x):
-        return 0.
+        return max(0.0, x)
 
     def calc_gradients(self, x):
-        return 0.
+        return np.heaviside(x, 0)
+
+
+class Identity(Activation):
+    def __init__(self):
+        super(Identity, self).__init__()
+
+    def _function(self, x):
+        return x
+
+    def calc_gradients(self, x):
+        return 1
 
 ############################################# Loss functions
-# 최근에 많이 쓰이는 종류가 몇 개 없음.
-# 기본 베이스는 크게 두개 cross entropy, mean squared error, . . .
+# 최근에 많이 쓰이는 종류가 많지 않음
+# 기본 베이스는 크게 두 가지로 cross entropy, mean squared error.
 
 class CrossEntropy(LossFunction):
     def __init__(self):
@@ -122,7 +133,7 @@ class CrossEntropy(LossFunction):
         return f
 
     def calc_gradients(self, y, t):
-        # 라벨 값에 y 값의 역수를 곱해주면 됨.
+        # 라벨 값에 y 값의 역수를 곱해주면 됨
         return -np.multiply(t, 1. / y)
 
 
@@ -144,7 +155,7 @@ class GradientDescentOptimizer:
     def __init__(self, lr):
         self.lr = lr
 
-    # 레이어 별로 학습 할 거임. 따라서 layer를 매개변수로 전달 받음
+    # 레이어 별 학습. 따라서 레이어를 매개변수로 전달 받음
     def apply_gradients(self, layer):
         for i in range(len(layer.trainable_variables)):
             layer.trainable_variables[i] = layer.trainable_variables[i] - self.lr * layer.gradients[i]
@@ -257,7 +268,6 @@ class MLP:
 
         return z
 
-            
     # 입력 값과 라벨 값이 있어야 계산 가능
     def accuracy(self, x, t):
         y = self(x)
@@ -292,21 +302,21 @@ def main():
     data = load_digits()
     tr_X, tr_t, val_X, val_t, te_X, te_t = split(data)
 
-    # 인스턴스 생성
+    # Create Instance
     mlp = MLP(loss_func=CrossEntropy, learning_rate=1e-2)
 
     # val_y = mlp(val_X)
     # print (val_y.shape)
 
-    # plotting 코드
+    # for plotting
     fig, ax = plt.subplots(1, 2)
     losses , tr_accs, val_accs = [], [], []
 
-    # 학습 시킴
-    n_batch = 100 # 미니배치 크기 100
+    # Training
+    n_batch = 100 # mini-batch size: 100
     n_epoch = 20
     for e in range(n_epoch):
-        # 학습 데이터 셋의 크기를 배치 크기로 나누면 순회 몇 번인지 알 수 있음
+        # We can know what is size of loop by dividing train dataset as mini batch size.
         for i in range(int(np.ceil(len(tr_X) / n_batch))):
             mb_X, mb_t = tr_X[i * n_batch:(i+1) * n_batch], tr_t[i * n_batch:(i+1) * n_batch]
 
@@ -330,7 +340,7 @@ def main():
             fig.canvas.draw()
             plt.pause(0.001)
 
-        # 한 에폭이 끝날 때 마다 테스트 셋을 이용해서 성능 측정
+        # Performance evaluation using test set whenever 1 epoch is finish.
         te_acc = mlp.accuracy(te_X, te_t)
         print('* end of epoch(%d), te acc: %f' % (e, te_acc))
 
