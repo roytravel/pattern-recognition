@@ -24,15 +24,16 @@ from sklearn.model_selection import cross_val_score, cross_validate
 from sklearn.metrics import f1_score
 from sklearn.metrics import roc_curve, auc
 from tensorflow.keras.metrics import Accuracy, Precision, Recall, AUC
-from tensorflow.keras.callbacks import ModelCheckpoint
-from tensorflow.keras.callbacks import EarlyStopping
+from tensorflow.keras.callbacks import ModelCheckpoint, EarlyStopping, CSVLogger
+
 
 class SynDetectModel(object):
     def __init__(self):
         self.model = tf.keras.Sequential(self._build_layer())
         self.model.compile(optimizer=RMSprop(learning_rate=1e-5), loss='binary_crossentropy', metrics=['accuracy', Precision(name='precision'), Recall(name='recall'), AUC(name='auc')])
         self.model.summary()
-        self.model_checkpoint = ModelCheckpoint('syn_best_model.h5', monitor='loss', mode='min', save_best_only=True)
+        self.model_checkpoint = ModelCheckpoint('./hidden/syn_best_model.h5', monitor='loss', mode='min', save_best_only=True)
+        self.csv_logger = CSVLogger('./hidden/syn_training.log')
 
 
     def augment_image(self):
@@ -56,7 +57,6 @@ class SynDetectModel(object):
 
             Conv2D(64, (3, 3), padding='same', activation='relu'),
             Conv2D(64, (3, 3), padding='same', activation='relu'),
-
             MaxPool2D(pool_size=(2, 2)),
             BatchNormalization(),
 
@@ -74,19 +74,11 @@ class SynDetectModel(object):
 
         return layers
 
-    def loss(self, y_true, y_pred):  # 텐서플로우에서 제공해주는 형태를 위해 y_true, y_pred 추가
-        y_true = tf.cast(y_true, tf.int32)
-        y_true = tf.squeeze(tf.one_hot(y_true, depth=1, dtype=tf.float32), 1)  # (N, 2) N = 배치 크기, 2 = 라벨 개수
-        y_pred = tf.nn.sigmoid(y_pred, 1)
-        # 메뉴얼 Cross Entropy 구현
-        return -tf.reduce_mean(tf.reduce_sum(tf.multiply(y_true, tf.math.log(y_pred)), 1))
-
+    def loss(self, y_true, y_pred):
+        pass
 
     def accuracy(self, y_true, y_pred):
-        y_true = tf.cast(y_true, tf.int32)
-        y_true = tf.squeeze(tf.one_hot(y_true, depth=2, dtype=tf.float32), 1)  # (N, 2)
-
-        return tf.reduce_mean(tf.cast(tf.equal(tf.argmax(y_true, 1), tf.argmax(y_pred, 1)), tf.float32))
+        pass
 
     def is_model_saved(self):
         try:
@@ -100,7 +92,7 @@ class SynDetectModel(object):
     def fit(self, train_set, valid_set, n_epochs, early_stop, flag):
         if flag == False:
             print ('[*] Start fitting the model')
-            history = self.model.fit(train_set, validation_data=valid_set, epochs=n_epochs, callbacks=[early_stop, self.model_checkpoint], verbose=1)
+            history = self.model.fit(train_set, validation_data=valid_set, epochs=n_epochs, callbacks=[early_stop, self.model_checkpoint, self.csv_logger], verbose=1)
             self.model.save('./hidden/syn_detect_model.h5')
             return history
         else:
@@ -145,7 +137,8 @@ class LocDetectModel(object):
         self.model = tf.keras.Sequential(self._build_layer())
         self.model.compile(optimizer=RMSprop(learning_rate=1e-5), loss='categorical_crossentropy', metrics=['accuracy', Precision(name='precision'), Recall(name='recall'), AUC(name='auc')])
         self.model.summary()
-        self.model_checkpoint = ModelCheckpoint('loc_best_model.h5', monitor='loss', mode='min', save_best_only=True)
+        self.model_checkpoint = ModelCheckpoint('./hidden/loc_best_model.h5', monitor='loss', mode='min', save_best_only=True)
+        self.csv_logger = CSVLogger('./hidden/loc_training.log')
 
 
     def create_df(self):
@@ -237,10 +230,12 @@ class LocDetectModel(object):
             Conv2D(64, (3, 3), padding='same', activation='relu'),
             MaxPool2D(pool_size=(2, 2)),
             BatchNormalization(),
+            Dropout(0.2),
 
             Conv2D(128, (3, 3), padding='same', activation='relu'),
             MaxPool2D(pool_size=(2, 2)),
             BatchNormalization(),
+            Dropout(0.2),
 
             Conv2D(256, (3, 3), padding='same', activation='relu'),
             MaxPool2D(pool_size=(2, 2)),
@@ -252,8 +247,13 @@ class LocDetectModel(object):
 
         return layers
 
+
+    def accuracy(self):
+        pass
+
     def loss(self):
         pass
+
 
     def is_model_saved(self):
         try:
@@ -267,15 +267,13 @@ class LocDetectModel(object):
     def fit(self, train_set, valid_set, n_epochs, early_stop, flag):
         if flag == False:
             print('[*] Start fitting the model')
-            history = self.model.fit(train_set, validation_data=valid_set, epochs=n_epochs, callbacks=[early_stop, self.model_checkpoint], verbose=1)
+            history = self.model.fit(train_set, validation_data=valid_set, epochs=n_epochs, callbacks=[early_stop, self.model_checkpoint, self.csv_logger], verbose=1)
             self.model.save('./hidden/loc_detect_model.h5')
             return history
         else:
             self.model = load_model('./hidden/loc_detect_model.h5')
             return self.model
 
-    def accuracy(self):
-        pass
 
     def evaluate(self, valid_set):
         print('[*] Start evaluating the model')
@@ -290,6 +288,8 @@ class LocDetectModel(object):
     def test_predict(self, test_set):
         print('[*] Start inferencing')
         print(test_set.class_indices)
+        map_table = {0: '0001', 1: '0010', 2: '0011', 3: '0100', 4: '0101', 5: '0110', 6: '0111', 7: '1000',
+                     8: '1001', 9: '1010', 10: '1011', 11: '1100', 12: '1101', 13:'1110', 14:'1111'}
 
         y_pred = list()
         y_true = list()
@@ -303,51 +303,62 @@ class LocDetectModel(object):
 
             fname = i.split('.')[0].split('_')[-1]
             real_label = test_set.class_indices[fname]
+
             y_true.append(real_label)
             y_pred.append(predict_result[0])
-            print(i, real_label, predict_result[0])
-            # if real_label == predict_result[0]:
-            #     y_pred.append(real_label)
-            #     # print (i+ ": True")
-            # else:
-            #     y_pred.append(real_label)
-            #     # print (i+ ": False")
 
-        #y_true = [0 for i in range(len(fake_images))]
-        print (round(f1_score(y_true, y_pred, average='micro'), 4))
+            r_result = map_table[real_label]
+            p_result = map_table[predict_result[0]]
 
-        #predict = np.argmax(locate_model.predict(img2, verbose=1), axis=1)
-        #print(predict)
+            left_eye, right_eye, nose, mouth = False, False, False, False
+
+            if r_result == p_result:
+                if p_result[0] == "1":
+                    left_eye = True
+                if p_result[1] == "1":
+                    right_eye = True
+                if p_result[2] == "1":
+                    nose = True
+                if p_result[3] == "1":
+                    mouth = True
+                print(f"[*] {i} : {real_label}, {predict_result[0]}\n  [+] 왼 : {left_eye}, \n  [+] 오 : {right_eye}\n  [+] 코 : {nose}\n  [+] 입 : {mouth}")
+
+            else:
+                print(f"[!] {i} : {real_label}, {predict_result[0]} --> Fail")
+
+        print(f"[*] F1 Score: {round(f1_score(y_true, y_pred, average='micro'),4)}")
 
 
-def plot(epochs, history, flag):
-    if flag:
-        xc = range(epochs)
-        train_loss = history.history['loss']
-        val_loss = history.history['val_loss']
-        train_acc = history.history['accuracy']
-        val_acc = history.history['val_accuracy']
 
-        plt.figure(1, figsize=(7, 5))
-        plt.plot(xc, train_loss)
-        plt.plot(xc, val_loss)
-        plt.xlabel('Num of Epochs')
-        plt.ylabel('Loss')
-        plt.title('Train loss vs Validation loss')
-        plt.grid(True)
-        plt.legend(['train', 'val'])
-        plt.style.use(['classic']) # print plt.style.available # use bmh, classic,ggplot for big pictures
+def plot(epochs, history, prefix):
+    xc = range(epochs)
+    train_loss = history.history['loss']
+    val_loss = history.history['val_loss']
+    train_acc = history.history['accuracy']
+    val_acc = history.history['val_accuracy']
 
-        plt.figure(2, figsize=(7, 5))
-        plt.plot(xc, train_acc)
-        plt.plot(xc, val_acc)
-        plt.xlabel('Num of Epochs')
-        plt.ylabel('Accuracy')
-        plt.title('Train accuracy vs Validation accuracy')
-        plt.grid(True)
-        plt.legend(['Train', 'Validation'], loc=4)
-        plt.style.use(['classic'])
-    plt.show()
+    plt.figure(1, figsize=(7, 5))
+    plt.plot(xc, train_loss)
+    plt.plot(xc, val_loss)
+    plt.xlabel('Num of Epochs')
+    plt.ylabel('Loss')
+    plt.title('Train loss vs Validation loss')
+    plt.grid(True)
+    plt.legend(['Train', 'Validation'], loc=4)
+    plt.style.use(['classic']) # print plt.style.available # use bmh, classic,ggplot for big pictures
+    plt.savefig('./hidden/{}_loss.png'.format(prefix))
+
+    plt.figure(2, figsize=(7, 5))
+    plt.plot(xc, train_acc)
+    plt.plot(xc, val_acc)
+    plt.xlabel('Num of Epochs')
+    plt.ylabel('Accuracy')
+    plt.title('Train accuracy vs Validation accuracy')
+    plt.grid(True)
+    plt.legend(['Train', 'Validation'], loc=4)
+    plt.style.use(['classic'])
+    plt.savefig('./hidden/{}_accuracy.png'.format(prefix))
+    plt.cla()
 
 
 def main():
@@ -356,40 +367,29 @@ def main():
     L = LocDetectModel()
 
     epochs = 100
-    early_stop = EarlyStopping(monitor='val_loss', patience=3)
+    early_stop = EarlyStopping(monitor='loss', patience=3)
 
     # Synthesis Detection --> True/False
-    train_set, valid_set, test_set = S.augment_image()
-    flag = S.is_model_saved()
-    history = S.fit(train_set, valid_set, epochs, early_stop, flag)
+    # train_set, valid_set, test_set = S.augment_image()
+    # flag = S.is_model_saved()
+    # history = S.fit(train_set, valid_set, epochs, early_stop, flag)
+    # plot(early_stop.stopped_epoch + 1, history, "syn")
+    # evaluation = S.evaluate(valid_set)
+    # print(f'\n[+] Loss : {round(evaluation[0],4)}\n[+] Accuracy : {round(evaluation[1], 4)}\n[+] Precision : {round(evaluation[2], 4)}\n[+] Recall : {round(evaluation[3], 4)}\n[+] AUC : {round(evaluation[4], 4)}\n')
+    # #predict = S.predict(test_set)
+    # S.test_predict()
 
-    if flag:
-        plot(early_stop.stopped_epoch-1, history, True)
-
-    evaluation = S.evaluate(valid_set) # 모델 평가 (loss, accuracy)
-    print(f'  \n[+] Loss : {round(evaluation[0],4)}\n  [+] Accuracy : {round(evaluation[1], 4)}\n  [+] Precision : {round(evaluation[2], 4)}\n  [+] Recall : {round(evaluation[3], 4)}\n  [+] AUC : {round(evaluation[4], 4)}')
-    predict = S.predict(test_set) # 모델 예측 (test_set 전체 결과 도출)
-    S.test_predict()
 
     # Location Detection --> Left eye, Right eye, Nose, Mouth
     train_df, test_df = L.create_df()
     train_set, valid_set, test_set = L.augment_image(train_df, test_df)
     flag = L.is_model_saved()
     history2 = L.fit(train_set, valid_set, epochs, early_stop, flag)
-
-    if history2 is not None:
-        plot(early_stop.stopped_epoch-1, history2, True)
+    plot(early_stop.stopped_epoch + 1, history2, "loc")
     evaluation2 = L.evaluate(valid_set)
-    print(f'[*] Loss : {round(evaluation2[0], 4)} Accuracy : {round(evaluation2[1], 4)}')
+    print(f'\n[+] Loss : {round(evaluation2[0],4)}\n[+] Accuracy : {round(evaluation2[1], 4)}\n[+] Precision : {round(evaluation2[2], 4)}\n[+] Recall : {round(evaluation2[3], 4)}\n[+] AUC : {round(evaluation2[4], 4)}\n')
     #predict2 = L.predict(test_set)
     L.test_predict(test_set)
-
-
-    # # Augmentation
-    # # 피처, 라벨 분리
-    #y_train = np.array(train_df.drop(['filename'], axis=1))
-    #y_test = np.array(test_df.drop(['filename'], axis=1))
-
 
 
 if __name__ == "__main__":
