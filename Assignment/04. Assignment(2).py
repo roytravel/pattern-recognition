@@ -110,7 +110,7 @@ class SynDetectModel(object):
         return self.model.predict(test_set, verbose=1)
 
     def test_predict(self):
-        print ('[*] Start inferencing')
+        print ('[*] Start inference')
 
         y_pred = list()
         fake_images = os.listdir('./test/training_fake/')
@@ -131,6 +131,9 @@ class SynDetectModel(object):
         y_true = [0 for i in range(len(fake_images))]
         print (f"[*] F1 Score: {f1_score(y_true, y_pred, average='micro')}")
 
+    def cross_validation(self, train_set):
+        return cross_val_score(self.model, train_set, cv=3)
+
 
 class LocDetectModel(object):
     def __init__(self):
@@ -142,7 +145,6 @@ class LocDetectModel(object):
 
 
     def create_df(self):
-
         train_path = 'train/'
         test_path = 'test/'
 
@@ -286,7 +288,7 @@ class LocDetectModel(object):
 
 
     def test_predict(self, test_set):
-        print('[*] Start inferencing')
+        print('[*] Start inference')
         print(test_set.class_indices)
         map_table = {0: '0001', 1: '0010', 2: '0011', 3: '0100', 4: '0101', 5: '0110', 6: '0111', 7: '1000',
                      8: '1001', 9: '1010', 10: '1011', 11: '1100', 12: '1101', 13:'1110', 14:'1111'}
@@ -330,6 +332,8 @@ class LocDetectModel(object):
 
 
 
+
+
 def plot(epochs, history, prefix):
     xc = range(epochs)
     train_loss = history.history['loss']
@@ -370,14 +374,15 @@ def main():
     early_stop = EarlyStopping(monitor='loss', patience=3)
 
     # Synthesis Detection --> True/False
-    # train_set, valid_set, test_set = S.augment_image()
-    # flag = S.is_model_saved()
-    # history = S.fit(train_set, valid_set, epochs, early_stop, flag)
-    # plot(early_stop.stopped_epoch + 1, history, "syn")
-    # evaluation = S.evaluate(valid_set)
-    # print(f'\n[+] Loss : {round(evaluation[0],4)}\n[+] Accuracy : {round(evaluation[1], 4)}\n[+] Precision : {round(evaluation[2], 4)}\n[+] Recall : {round(evaluation[3], 4)}\n[+] AUC : {round(evaluation[4], 4)}\n')
-    # #predict = S.predict(test_set)
-    # S.test_predict()
+    train_set, valid_set, test_set = S.augment_image()
+    flag = S.is_model_saved()
+    history = S.fit(train_set, valid_set, epochs, early_stop, flag)
+    plot(early_stop.stopped_epoch + 1, history, "syn")
+    evaluation = S.evaluate(valid_set)
+    print(f'\n[+] Loss : {round(evaluation[0],4)}\n[+] Accuracy : {round(evaluation[1], 4)}\n[+] Precision : {round(evaluation[2], 4)}\n[+] Recall : {round(evaluation[3], 4)}\n[+] AUC : {round(evaluation[4], 4)}\n')
+    #predict = S.predict(test_set)
+    S.test_predict()
+    #S.cross_validation(train_set)
 
 
     # Location Detection --> Left eye, Right eye, Nose, Mouth
